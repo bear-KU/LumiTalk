@@ -5,7 +5,7 @@ class NativeBridge {
 
     companion object {
         init {
-            System.loadLibrary("native-lib")
+            System.loadLibrary("native-send")
         }
     }
 }
