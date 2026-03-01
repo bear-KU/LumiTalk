@@ -1,9 +1,7 @@
 package com.lumitalk
 
 class NativeBridge {
-
-    external fun add(a: Int, b: Int): Int
-    external fun helloFromCpp(): String
+    external fun generateSignalSequence(data: String, T: Int): IntArray
 
     companion object {
         init {

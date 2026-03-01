@@ -8,6 +8,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.lumitalk.ui.screens.MainScreen
+import com.lumitalk.ui.screens.SendScreen
+import com.lumitalk.ui.screens.ReceiveScreen
 import com.lumitalk.ui.screens.PlaceholderScreen
 
 @Composable
@@ -26,6 +28,12 @@ fun AppNavigation(
     ) {
         composable(BottomNavItem.Home.route) {
             MainScreen()
+        }
+            composable(BottomNavItem.Send.route) {
+            SendScreen()
+        }
+        composable(BottomNavItem.Receive.route) {
+            ReceiveScreen()
         }
         composable(BottomNavItem.Settings.route) {
             PlaceholderScreen()
