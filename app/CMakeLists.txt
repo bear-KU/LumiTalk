@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22.1)
 
-project(native_send)
+project(lumitalk)
 
 add_library(
         native-send
