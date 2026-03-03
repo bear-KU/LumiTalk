@@ -41,6 +41,7 @@ private fun openCameraInternal(
 
     val stateCallback = object : CameraDevice.StateCallback() {
         override fun onOpened(camera: CameraDevice) {
+            android.util.Log.d("CameraState", "Camera opened")
             onDeviceOpened(camera)
 
             if (config.mode == CameraMode.HIGH_SPEED) {
@@ -146,10 +147,13 @@ fun rememberCameraState(): CameraState {
     }
 
     val closeCamera: () -> Unit = {
-        captureSession?.close()
-        captureSession = null
-        cameraDevice?.close()
-        cameraDevice = null
+        android.util.Log.d("CameraState", "Closing camera")
+        if (captureSession != null || cameraDevice != null) {
+            captureSession?.close()
+            captureSession = null
+            cameraDevice?.close()
+            cameraDevice = null
+        }
         Unit
     }
 
@@ -180,11 +184,26 @@ fun rememberCameraState(): CameraState {
         Unit
     }
 
-    DisposableEffect(Unit) {
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> {
+                    android.util.Log.d("CameraState", "ON_PAUSE: closing camera")
+                    closeCamera()
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            android.util.Log.d("CameraState", "onDispose: closing camera")
+            lifecycleOwner.lifecycle.removeObserver(observer)
             closeCamera()
         }
     }
+
 
     return CameraState(
         hasPermission = hasPermission,

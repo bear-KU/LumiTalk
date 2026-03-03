@@ -93,8 +93,24 @@ fun rememberFlashlightState(): FlashlightState {
         Unit
     }
 
-    DisposableEffect(Unit) {
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> {
+                    android.util.Log.d("FlashlightState", "ON_PAUSE: turning off flash")
+                    if (isFlashOn) {
+                        setFlash(false)
+                    }
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            android.util.Log.d("FlashlightState", "onDispose: turning off flash")
+            lifecycleOwner.lifecycle.removeObserver(observer)
             if (isFlashOn) {
                 setFlash(false)
             }
