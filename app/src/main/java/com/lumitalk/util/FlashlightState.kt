@@ -53,7 +53,7 @@ fun rememberFlashlightState(): FlashlightState {
                 cameraManager.setTorchMode(it, state)
                 isFlashOn = state
             } catch (e: Exception) {
-                e.printStackTrace()
+                // e.printStackTrace()
             }
         }
         Unit
@@ -95,7 +95,9 @@ fun rememberFlashlightState(): FlashlightState {
 
     DisposableEffect(Unit) {
         onDispose {
-            setFlash(false)
+            if (isFlashOn) {
+                setFlash(false)
+            }
         }
     }
 
