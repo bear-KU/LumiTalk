@@ -15,14 +15,18 @@ class CameraState(
     val hasPermission: Boolean,
     val cameraDevice: CameraDevice?,
     val captureSession: CameraCaptureSession?,
+    val currentConfig: CameraConfig,
     val requestPermission: () -> Unit,
-    val openCamera: (Context, Surface, Int, Int) -> Unit,
-    val closeCamera: () -> Unit
+    val openCamera: (Context, Surface, List<Surface>, CameraConfig) -> Unit,
+    val closeCamera: () -> Unit,
+    val switchMode: () -> Unit
 )
 
 private fun openCameraInternal(
     context: Context,
-    surface: Surface,
+    previewSurface: Surface,
+    analysisSurfaces: List<Surface>,
+    config: CameraConfig,
     onDeviceOpened: (CameraDevice) -> Unit,
     onSessionCreated: (CameraCaptureSession) -> Unit,
     onDeviceClosed: () -> Unit
@@ -33,27 +37,64 @@ private fun openCameraInternal(
             .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
     } ?: return
 
+    val allSurfaces = listOf(previewSurface) + analysisSurfaces
+
     val stateCallback = object : CameraDevice.StateCallback() {
         override fun onOpened(camera: CameraDevice) {
             onDeviceOpened(camera)
-            val captureRequest = camera.createCaptureRequest(
-                CameraDevice.TEMPLATE_PREVIEW
-            ).apply {
-                addTarget(surface)
-            }
 
-            @Suppress("DEPRECATION")
-            camera.createCaptureSession(
-                listOf(surface),
-                object : CameraCaptureSession.StateCallback() {
-                    override fun onConfigured(session: CameraCaptureSession) {
-                        onSessionCreated(session)
-                        session.setRepeatingRequest(captureRequest.build(), null, null)
-                    }
-                    override fun onConfigureFailed(session: CameraCaptureSession) {}
-                },
-                null
-            )
+            if (config.mode == CameraMode.HIGH_SPEED) {
+                val captureRequest = camera.createCaptureRequest(
+                    CameraDevice.TEMPLATE_RECORD
+                ).apply {
+                    allSurfaces.forEach { addTarget(it) }
+                    set(
+                        CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                        android.util.Range(config.fps, config.fps)
+                    )
+                }
+
+                @Suppress("DEPRECATION")
+                camera.createConstrainedHighSpeedCaptureSession(
+                    allSurfaces,
+                    object : CameraCaptureSession.StateCallback() {
+                        override fun onConfigured(session: CameraCaptureSession) {
+                            onSessionCreated(session)
+                            val highSpeedSession =
+                                session as CameraConstrainedHighSpeedCaptureSession
+                            val requests = highSpeedSession.createHighSpeedRequestList(
+                                captureRequest.build()
+                            )
+                            session.setRepeatingBurst(requests, null, null)
+                        }
+                        override fun onConfigureFailed(session: CameraCaptureSession) {}
+                    },
+                    null
+                )
+            } else {
+                val captureRequest = camera.createCaptureRequest(
+                    CameraDevice.TEMPLATE_PREVIEW
+                ).apply {
+                    allSurfaces.forEach { addTarget(it) }
+                    set(
+                        CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                        android.util.Range(config.fps, config.fps)
+                    )
+                }
+
+                @Suppress("DEPRECATION")
+                camera.createCaptureSession(
+                    allSurfaces,
+                    object : CameraCaptureSession.StateCallback() {
+                        override fun onConfigured(session: CameraCaptureSession) {
+                            onSessionCreated(session)
+                            session.setRepeatingRequest(captureRequest.build(), null, null)
+                        }
+                        override fun onConfigureFailed(session: CameraCaptureSession) {}
+                    },
+                    null
+                )
+            }
         }
 
         override fun onDisconnected(camera: CameraDevice) {
@@ -89,6 +130,7 @@ fun rememberCameraState(): CameraState {
     }
     var cameraDevice by remember { mutableStateOf<CameraDevice?>(null) }
     var captureSession by remember { mutableStateOf<CameraCaptureSession?>(null) }
+    var currentConfig by remember { mutableStateOf<CameraConfig>(STANDARD_CONFIG) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -111,17 +153,30 @@ fun rememberCameraState(): CameraState {
         Unit
     }
 
-    val openCamera: (Context, Surface, Int, Int) -> Unit = { ctx, surface, _, _ ->
-        openCameraInternal(
-            context = ctx,
-            surface = surface,
-            onDeviceOpened = { device -> cameraDevice = device },
-            onSessionCreated = { session -> captureSession = session },
-            onDeviceClosed = {
-                cameraDevice = null
-                captureSession = null
-            }
-        )
+    val openCamera: (Context, Surface, List<Surface>, CameraConfig) -> Unit =
+        { ctx, previewSurface, analysisSurfaces, config ->
+            openCameraInternal(
+                context = ctx,
+                previewSurface = previewSurface,
+                analysisSurfaces = analysisSurfaces,
+                config = config,
+                onDeviceOpened = { device -> cameraDevice = device },
+                onSessionCreated = { session -> captureSession = session },
+                onDeviceClosed = {
+                    cameraDevice = null
+                    captureSession = null
+                }
+            )
+            Unit
+        }
+
+    val switchMode: () -> Unit = {
+        currentConfig = if (currentConfig.mode == CameraMode.STANDARD) {
+            HIGH_SPEED_CONFIG
+        } else {
+            STANDARD_CONFIG
+        }
+        closeCamera()
         Unit
     }
 
@@ -135,8 +190,10 @@ fun rememberCameraState(): CameraState {
         hasPermission = hasPermission,
         cameraDevice = cameraDevice,
         captureSession = captureSession,
+        currentConfig = currentConfig,
         requestPermission = requestPermission,
         openCamera = openCamera,
-        closeCamera = closeCamera
+        closeCamera = closeCamera,
+        switchMode = switchMode
     )
 }
