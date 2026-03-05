@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.lumitalk.NativeBridge
-import com.lumitalk.util.rememberFlashlightState
+import com.lumitalk.util.flashlight.rememberFlashlightState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

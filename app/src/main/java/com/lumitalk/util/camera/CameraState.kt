@@ -1,4 +1,4 @@
-package com.lumitalk.util
+package com.lumitalk.util.camera
 
 import android.Manifest
 import android.content.Context

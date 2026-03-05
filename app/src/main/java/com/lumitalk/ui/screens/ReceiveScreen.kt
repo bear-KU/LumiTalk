@@ -12,8 +12,7 @@ import com.lumitalk.NativeBridge
 import com.lumitalk.ui.components.CameraModeButton
 import com.lumitalk.ui.components.CameraPreview
 import com.lumitalk.ui.components.RecordButton
-import com.lumitalk.util.CameraMode
-import com.lumitalk.util.rememberCameraState
+import com.lumitalk.util.camera.rememberCameraState
 
 @Composable
 fun ReceiveScreen(modifier: Modifier = Modifier) {
@@ -50,14 +49,8 @@ fun ReceiveScreen(modifier: Modifier = Modifier) {
                 .align(Alignment.TopStart)
                 .padding(16.dp)
         ) {
-            val displayInfo = if (cameraState.currentConfig.mode == CameraMode.HIGH_SPEED) {
-                "width: ${cameraState.currentConfig.width}, height: ${cameraState.currentConfig.height}"
-            } else {
-                frameInfo
-            }
-
             Text(
-                text = displayInfo,
+                text = frameInfo,
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White
             )

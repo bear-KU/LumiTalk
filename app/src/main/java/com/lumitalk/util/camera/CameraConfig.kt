@@ -1,4 +1,4 @@
-package com.lumitalk.util
+package com.lumitalk.util.camera
 
 enum class CameraMode {
     STANDARD,
