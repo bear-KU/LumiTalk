@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.lumitalk.NativeBridge
+import com.lumitalk.ui.components.AeLockButton
 import com.lumitalk.ui.components.CameraModeButton
 import com.lumitalk.ui.components.CameraPreview
 import com.lumitalk.ui.components.RecordButton
@@ -66,6 +67,15 @@ fun ReceiveScreen(modifier: Modifier = Modifier) {
             onClick = { cameraState.switchMode() },
             modifier = Modifier
                 .align(Alignment.TopEnd)
+                .padding(16.dp)
+        )
+
+        AeLockButton(
+            isLocked = cameraState.isAeLocked,
+            onLock = { cameraState.lockAeAf() },
+            onUnlock = { cameraState.unlockAeAf() },
+            modifier = Modifier
+                .align(Alignment.BottomStart)
                 .padding(16.dp)
         )
 

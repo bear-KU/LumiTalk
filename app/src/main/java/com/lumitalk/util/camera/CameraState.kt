@@ -16,10 +16,13 @@ class CameraState(
     val cameraDevice: CameraDevice?,
     val captureSession: CameraCaptureSession?,
     val currentConfig: CameraConfig,
+    val isAeLocked: Boolean,
     val requestPermission: () -> Unit,
     val openCamera: (Context, Surface, List<Surface>, CameraConfig) -> Unit,
     val closeCamera: () -> Unit,
-    val switchMode: () -> Unit
+    val switchMode: () -> Unit,
+    val lockAeAf: () -> Unit,
+    val unlockAeAf: () -> Unit
 )
 
 private fun openCameraInternal(
@@ -132,6 +135,8 @@ fun rememberCameraState(): CameraState {
     var cameraDevice by remember { mutableStateOf<CameraDevice?>(null) }
     var captureSession by remember { mutableStateOf<CameraCaptureSession?>(null) }
     var currentConfig by remember { mutableStateOf<CameraConfig>(STANDARD_CONFIG) }
+    var isAeLocked by remember { mutableStateOf(false) }
+    var lastSurfaces by remember { mutableStateOf<List<Surface>>(emptyList()) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -154,11 +159,13 @@ fun rememberCameraState(): CameraState {
             cameraDevice?.close()
             cameraDevice = null
         }
+        isAeLocked = false
         Unit
     }
 
     val openCamera: (Context, Surface, List<Surface>, CameraConfig) -> Unit =
         { ctx, previewSurface, analysisSurfaces, config ->
+            lastSurfaces = listOf(previewSurface) + analysisSurfaces
             openCameraInternal(
                 context = ctx,
                 previewSurface = previewSurface,
@@ -169,10 +176,81 @@ fun rememberCameraState(): CameraState {
                 onDeviceClosed = {
                     cameraDevice = null
                     captureSession = null
+                    isAeLocked = false
                 }
             )
             Unit
         }
+
+    val lockAeAf: () -> Unit = {
+        val session = captureSession
+        val device = cameraDevice
+        val config = currentConfig
+        if (session != null && device != null) {
+            try {
+                val requestBuilder = device.createCaptureRequest(
+                    if (config.mode == CameraMode.HIGH_SPEED) CameraDevice.TEMPLATE_RECORD
+                    else CameraDevice.TEMPLATE_PREVIEW
+                ).apply {
+                    lastSurfaces.forEach { addTarget(it) }
+                    set(CaptureRequest.CONTROL_AE_LOCK, true)
+                    set(CaptureRequest.CONTROL_AWB_LOCK, true)
+                    set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                        android.util.Range(config.fps, config.fps))
+                }
+
+                if (config.mode == CameraMode.HIGH_SPEED) {
+                    val highSpeedSession = session as CameraConstrainedHighSpeedCaptureSession
+                    val requests = highSpeedSession.createHighSpeedRequestList(
+                        requestBuilder.build()
+                    )
+                    session.setRepeatingBurst(requests, null, null)
+                } else {
+                    session.setRepeatingRequest(requestBuilder.build(), null, null)
+                }
+                isAeLocked = true
+                android.util.Log.d("CameraState", "AE/AF locked")
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        Unit
+    }
+
+    val unlockAeAf: () -> Unit = {
+        val session = captureSession
+        val device = cameraDevice
+        val config = currentConfig
+        if (session != null && device != null) {
+            try {
+                val requestBuilder = device.createCaptureRequest(
+                    if (config.mode == CameraMode.HIGH_SPEED) CameraDevice.TEMPLATE_RECORD
+                    else CameraDevice.TEMPLATE_PREVIEW
+                ).apply {
+                    lastSurfaces.forEach { addTarget(it) }
+                    set(CaptureRequest.CONTROL_AE_LOCK, false)
+                    set(CaptureRequest.CONTROL_AWB_LOCK, false)
+                    set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                        android.util.Range(config.fps, config.fps))
+                }
+
+                if (config.mode == CameraMode.HIGH_SPEED) {
+                    val highSpeedSession = session as CameraConstrainedHighSpeedCaptureSession
+                    val requests = highSpeedSession.createHighSpeedRequestList(
+                        requestBuilder.build()
+                    )
+                    session.setRepeatingBurst(requests, null, null)
+                } else {
+                    session.setRepeatingRequest(requestBuilder.build(), null, null)
+                }
+                isAeLocked = false
+                android.util.Log.d("CameraState", "AE/AF unlocked")
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        Unit
+    }
 
     val switchMode: () -> Unit = {
         currentConfig = if (currentConfig.mode == CameraMode.STANDARD) {
@@ -204,15 +282,17 @@ fun rememberCameraState(): CameraState {
         }
     }
 
-
     return CameraState(
         hasPermission = hasPermission,
         cameraDevice = cameraDevice,
         captureSession = captureSession,
         currentConfig = currentConfig,
+        isAeLocked = isAeLocked,
         requestPermission = requestPermission,
         openCamera = openCamera,
         closeCamera = closeCamera,
-        switchMode = switchMode
+        switchMode = switchMode,
+        lockAeAf = lockAeAf,
+        unlockAeAf = unlockAeAf
     )
 }
