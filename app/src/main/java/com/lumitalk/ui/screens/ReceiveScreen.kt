@@ -20,9 +20,9 @@ fun ReceiveScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val cameraState = rememberCameraState()
     val nativeBridge = remember { NativeBridge() }
-    var frameInfo by remember { mutableStateOf("待機中...") }
     var currentFps by remember { mutableStateOf(0f) }
     var isRecording by remember { mutableStateOf(false) }
+    var decodedResults by remember { mutableStateOf<List<Triple<Int, Int, String>>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         if (!cameraState.hasPermission) {
@@ -35,7 +35,22 @@ fun ReceiveScreen(modifier: Modifier = Modifier) {
             CameraPreview(
                 cameraState = cameraState,
                 onFrameAvailable = { bytes, width, height ->
-                    frameInfo = nativeBridge.processFrame(bytes, width, height)
+                    val raw = nativeBridge.processFrame(bytes, width, height)
+                    if (raw.isNotEmpty()) {
+                        val results = mutableListOf<Triple<Int, Int, String>>()
+                        val regex = Regex("""\{"x":(\d+),"y":(\d+),"ascii":"([^"]*)"\}""")
+                        regex.findAll(raw).forEach { match ->
+                            val x = match.groupValues[1].toInt()
+                            val y = match.groupValues[2].toInt()
+                            val ascii = match.groupValues[3]
+                            if (ascii.isNotEmpty()) {
+                                results.add(Triple(x, y, ascii))
+                            }
+                        }
+                        if (results.isNotEmpty()) {
+                            decodedResults = decodedResults + results
+                        }
+                    }
                 },
                 onFpsUpdated = { fps ->
                     currentFps = fps
@@ -51,15 +66,17 @@ fun ReceiveScreen(modifier: Modifier = Modifier) {
                 .padding(16.dp)
         ) {
             Text(
-                text = frameInfo,
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White
-            )
-            Text(
                 text = "FPS: ${"%.1f".format(currentFps)}",
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White
             )
+            decodedResults.forEach { (x, y, ascii) ->
+                Text(
+                    text = "[x=$x, y=$y] $ascii",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.Yellow
+                )
+            }
         }
 
         CameraModeButton(

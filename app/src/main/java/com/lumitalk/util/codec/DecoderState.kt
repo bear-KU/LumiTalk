@@ -13,7 +13,7 @@ class DecoderState(
     private val onFrameAvailable: (ByteArray, Int, Int) -> Unit,
 ) {
     var codec: MediaCodec? = null
-    var isStarted: Boolean = false
+    @Volatile var isStarted: Boolean = false
     private val inputBufferQueue = java.util.concurrent.LinkedBlockingQueue<Int>()
 
     fun initialize(format: MediaFormat) {
@@ -34,8 +34,12 @@ class DecoderState(
                     index: Int,
                     info: MediaCodec.BufferInfo
                 ) {
+                    if (!isStarted) return
+
                     if (info.size <= 0) {
-                        codec.releaseOutputBuffer(index, false)
+                        try {
+                            codec.releaseOutputBuffer(index, false)
+                        } catch (e: IllegalStateException) {}
                         return
                     }
 
@@ -56,10 +60,14 @@ class DecoderState(
                         onFrameAvailable(yBuffer, width, height)
                     }
 
-                    codec.releaseOutputBuffer(index, false)
+                    try {
+                        codec.releaseOutputBuffer(index, false)
+                    } catch (e: IllegalStateException) {}
                 }
 
-                override fun onError(codec: MediaCodec, e: MediaCodec.CodecException) {}
+                override fun onError(codec: MediaCodec, e: MediaCodec.CodecException) {
+                    isStarted = false
+                }
 
                 override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {}
             }, handler)
@@ -85,10 +93,10 @@ class DecoderState(
 
     fun release() {
         if (isStarted) {
+            isStarted = false
             codec?.stop()
             codec?.release()
             codec = null
-            isStarted = false
         }
     }
 }

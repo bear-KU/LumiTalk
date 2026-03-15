@@ -33,12 +33,12 @@ target_link_libraries(
         ${log-lib}
 )
 
-
 add_library(
         native-receive
         SHARED
         src/main/cpp/receive/receive.cpp
         src/main/cpp/receive/bridge.cpp
+        src/main/cpp/receive/tracking.cpp
 )
 
 target_include_directories(
