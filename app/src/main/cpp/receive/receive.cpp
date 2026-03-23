@@ -7,8 +7,8 @@
 #define LOG_TAG "receive"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
-const double DETECTION_THRESHOLD = 180.0;
-const double MIN_CONTOUR_AREA = 400.0;
+const double DETECTION_THRESHOLD = 200.0;
+const double MIN_CONTOUR_AREA = 1000.0;
 const double MAX_CONTOUR_AREA = 100000.0;
 const int MISS_COUNT_FOR_DELETION = 50;
 
@@ -156,22 +156,38 @@ std::string processFrame(const unsigned char* data, int width, int height)
     }
 
     std::lock_guard<std::mutex> results_lock(results_mutex);
-    if (!decodedResults.empty())
+
+    // 毎フレーム: アクティブトラッカーのバウンディングボックスを返す
+    std::string boxes_json = "[";
+    bool first_box = true;
+
+    for (const auto& tracker : activeTrackers)
     {
-        std::string json = "[";
-        bool first = true;
-        for (const auto& r : decodedResults)
-        {
-            if (r.ascii.empty()) continue;
-            if (!first) json += ",";
-            json += "{\"x\":" + std::to_string((int)r.pos.x)
-                  + ",\"y\":" + std::to_string((int)r.pos.y)
-                  + ",\"ascii\":\"" + r.ascii + "\"}";
-            first = false;
-        }
-        json += "]";
-        decodedResults.clear();
-        if (json != "[]") return json;
+        if (!first_box) boxes_json += ",";
+        int bx = (int)(tracker.pos.x - tracker.size.width / 2.0f);
+        int by = (int)(tracker.pos.y - tracker.size.height / 2.0f);
+        boxes_json += "{\"x\":" + std::to_string(bx)
+                    + ",\"y\":" + std::to_string(by)
+                    + ",\"w\":" + std::to_string((int)tracker.size.width)
+                    + ",\"h\":" + std::to_string((int)tracker.size.height) + "}";
+        first_box = false;
     }
-    return "";
+    boxes_json += "]";
+
+    // デコード済み結果
+    std::string decoded_json = "[";
+    bool first_dec = true;
+    for (const auto& r : decodedResults)
+    {
+        if (r.ascii.empty()) continue;
+        if (!first_dec) decoded_json += ",";
+        decoded_json += "{\"x\":" + std::to_string((int)r.pos.x)
+                      + ",\"y\":" + std::to_string((int)r.pos.y)
+                      + ",\"ascii\":\"" + r.ascii + "\"}";
+        first_dec = false;
+    }
+    decoded_json += "]";
+    decodedResults.clear();
+
+    return "{\"boxes\":" + boxes_json + ",\"decoded\":" + decoded_json + "}";
 }

@@ -46,58 +46,65 @@ private fun openCameraInternal(
         override fun onOpened(camera: CameraDevice) {
             android.util.Log.d("CameraState", "Camera opened")
             onDeviceOpened(camera)
+            try {
+                if (config.mode == CameraMode.HIGH_SPEED) {
+                    val captureRequest = camera.createCaptureRequest(
+                        CameraDevice.TEMPLATE_RECORD
+                    ).apply {
+                        allSurfaces.forEach { addTarget(it) }
+                        set(
+                            CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                            android.util.Range(config.fps, config.fps)
+                        )
+                    }
 
-            if (config.mode == CameraMode.HIGH_SPEED) {
-                val captureRequest = camera.createCaptureRequest(
-                    CameraDevice.TEMPLATE_RECORD
-                ).apply {
-                    allSurfaces.forEach { addTarget(it) }
-                    set(
-                        CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
-                        android.util.Range(config.fps, config.fps)
+                    @Suppress("DEPRECATION")
+                    camera.createConstrainedHighSpeedCaptureSession(
+                        allSurfaces,
+                        object : CameraCaptureSession.StateCallback() {
+                            override fun onConfigured(session: CameraCaptureSession) {
+                                onSessionCreated(session)
+                                val highSpeedSession =
+                                    session as CameraConstrainedHighSpeedCaptureSession
+                                val requests = highSpeedSession.createHighSpeedRequestList(
+                                    captureRequest.build()
+                                )
+                                session.setRepeatingBurst(requests, null, null)
+                            }
+                            override fun onConfigureFailed(session: CameraCaptureSession) {}
+                        },
+                        null
+                    )
+                } else {
+                    val captureRequest = camera.createCaptureRequest(
+                        CameraDevice.TEMPLATE_PREVIEW
+                    ).apply {
+                        allSurfaces.forEach { addTarget(it) }
+                        set(
+                            CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                            android.util.Range(config.fps, config.fps)
+                        )
+                    }
+
+                    @Suppress("DEPRECATION")
+                    camera.createCaptureSession(
+                        allSurfaces,
+                        object : CameraCaptureSession.StateCallback() {
+                            override fun onConfigured(session: CameraCaptureSession) {
+                                onSessionCreated(session)
+                                session.setRepeatingRequest(captureRequest.build(), null, null)
+                            }
+                            override fun onConfigureFailed(session: CameraCaptureSession) {}
+                        },
+                        null
                     )
                 }
-
-                @Suppress("DEPRECATION")
-                camera.createConstrainedHighSpeedCaptureSession(
-                    allSurfaces,
-                    object : CameraCaptureSession.StateCallback() {
-                        override fun onConfigured(session: CameraCaptureSession) {
-                            onSessionCreated(session)
-                            val highSpeedSession =
-                                session as CameraConstrainedHighSpeedCaptureSession
-                            val requests = highSpeedSession.createHighSpeedRequestList(
-                                captureRequest.build()
-                            )
-                            session.setRepeatingBurst(requests, null, null)
-                        }
-                        override fun onConfigureFailed(session: CameraCaptureSession) {}
-                    },
-                    null
-                )
-            } else {
-                val captureRequest = camera.createCaptureRequest(
-                    CameraDevice.TEMPLATE_PREVIEW
-                ).apply {
-                    allSurfaces.forEach { addTarget(it) }
-                    set(
-                        CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
-                        android.util.Range(config.fps, config.fps)
-                    )
-                }
-
-                @Suppress("DEPRECATION")
-                camera.createCaptureSession(
-                    allSurfaces,
-                    object : CameraCaptureSession.StateCallback() {
-                        override fun onConfigured(session: CameraCaptureSession) {
-                            onSessionCreated(session)
-                            session.setRepeatingRequest(captureRequest.build(), null, null)
-                        }
-                        override fun onConfigureFailed(session: CameraCaptureSession) {}
-                    },
-                    null
-                )
+            } catch (e: Exception) {
+                android.util.Log.e("CameraState", "Failed to configure camera session", e)
+                try {
+                    camera.close()
+                } catch (_: Exception) {}
+                onDeviceClosed()
             }
         }
 

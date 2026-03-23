@@ -1,11 +1,15 @@
 package com.lumitalk.ui.screens
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.lumitalk.NativeBridge
@@ -15,6 +19,13 @@ import com.lumitalk.ui.components.CameraPreview
 import com.lumitalk.ui.components.RecordButton
 import com.lumitalk.util.camera.rememberCameraState
 
+private data class DetectionBox(
+    val x: Int,
+    val y: Int,
+    val w: Int,
+    val h: Int
+)
+
 @Composable
 fun ReceiveScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -23,6 +34,8 @@ fun ReceiveScreen(modifier: Modifier = Modifier) {
     var currentFps by remember { mutableStateOf(0f) }
     var isRecording by remember { mutableStateOf(false) }
     var decodedResults by remember { mutableStateOf<List<Triple<Int, Int, String>>>(emptyList()) }
+    var detectionBoxes by remember { mutableStateOf<List<DetectionBox>>(emptyList()) }
+    var frameSize by remember { mutableStateOf(Pair(640, 480)) }
 
     LaunchedEffect(Unit) {
         if (!cameraState.hasPermission) {
@@ -35,21 +48,27 @@ fun ReceiveScreen(modifier: Modifier = Modifier) {
             CameraPreview(
                 cameraState = cameraState,
                 onFrameAvailable = { bytes, width, height ->
+                    frameSize = Pair(width, height)
                     val raw = nativeBridge.processFrame(bytes, width, height)
-                    if (raw.isNotEmpty()) {
-                        val results = mutableListOf<Triple<Int, Int, String>>()
-                        val regex = Regex("""\{"x":(\d+),"y":(\d+),"ascii":"([^"]*)"\}""")
-                        regex.findAll(raw).forEach { match ->
-                            val x = match.groupValues[1].toInt()
-                            val y = match.groupValues[2].toInt()
-                            val ascii = match.groupValues[3]
-                            if (ascii.isNotEmpty()) {
-                                results.add(Triple(x, y, ascii))
-                            }
-                        }
-                        if (results.isNotEmpty()) {
-                            decodedResults = decodedResults + results
-                        }
+                    // バウンディングボックスを毎フレームパース
+                    val boxRegex = Regex("""\{"x":(-?\d+),"y":(-?\d+),"w":(\d+),"h":(\d+)\}""")
+                    detectionBoxes = boxRegex.findAll(raw).map { m ->
+                        DetectionBox(
+                            m.groupValues[1].toInt(),
+                            m.groupValues[2].toInt(),
+                            m.groupValues[3].toInt(),
+                            m.groupValues[4].toInt()
+                        )
+                    }.toList()
+                    // デコード結果をパース
+                    val decodedRegex = Regex("""\{"x":(\d+),"y":(\d+),"ascii":"([^"]*)"\}""")
+                    val results = decodedRegex.findAll(raw)
+                        .map { it.groupValues }
+                        .filter { it[3].isNotEmpty() }
+                        .map { Triple(it[1].toInt(), it[2].toInt(), it[3]) }
+                        .toList()
+                    if (results.isNotEmpty()) {
+                        decodedResults = decodedResults + results
                     }
                 },
                 onFpsUpdated = { fps ->
@@ -58,6 +77,28 @@ fun ReceiveScreen(modifier: Modifier = Modifier) {
                 isRecording = isRecording,
                 modifier = Modifier.fillMaxSize()
             )
+        }
+
+        // 検出ボックスの緑色オーバーレイ
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val frameW = frameSize.first.toFloat()
+            val frameH = frameSize.second.toFloat()
+            // フレーム座標(横長)を画面座標(縦長)に90度右回転で合わせる
+            val scaleX = size.width / frameH
+            val scaleY = size.height / frameW
+            val strokePx = 3.dp.toPx()
+            detectionBoxes.forEach { box ->
+                val rotatedX = frameH - (box.y + box.h).toFloat()
+                val rotatedY = box.x.toFloat()
+                val rotatedW = box.h.toFloat()
+                val rotatedH = box.w.toFloat()
+                drawRect(
+                    color = Color.Green,
+                    topLeft = Offset(rotatedX * scaleX, rotatedY * scaleY),
+                    size = Size(rotatedW * scaleX, rotatedH * scaleY),
+                    style = Stroke(width = strokePx)
+                )
+            }
         }
 
         Column(
