@@ -39,6 +39,7 @@ add_library(
         src/main/cpp/receive/receive.cpp
         src/main/cpp/receive/bridge.cpp
         src/main/cpp/receive/tracking.cpp
+        src/main/cpp/receive/receive_center.cpp
 )
 
 target_include_directories(

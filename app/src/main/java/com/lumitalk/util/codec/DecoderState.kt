@@ -34,6 +34,7 @@ class DecoderState(
                     index: Int,
                     info: MediaCodec.BufferInfo
                 ) {
+                    android.util.Log.d("DecoderState", "onOutputBufferAvailable called")
                     if (!isStarted) return
 
                     if (info.size <= 0) {
