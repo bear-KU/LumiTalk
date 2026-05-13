@@ -71,7 +71,7 @@ static void workerFunc()
             {
                 if (s.first && s.second >= 8)
                 {
-                    LOGI("Leader found: T_frames=%.2f", s.second);
+                    LOGI("Leader found: T_frames=%.2d", s.second);
                     T_frames     = s.second / 8.0;
                     leader_found = true;
                     break;
@@ -82,12 +82,37 @@ static void workerFunc()
         if (leader_found && T_frames > 0.0 && current_on)
         {
             double ratio = state_counter / T_frames;
-            if (ratio >= 5.0)
+            if (ratio >= 3.5) // フレームドロップを考慮して，3.5 T 以上をトレイラとみなす
             {
+                LOGI("Trailer detected: ratio=%.2f", ratio);
                 states.push_back({last_state, state_counter});
 
                 DecodeResult result = decodeFromStates(0, T_frames, states);
-                // LOGI("Decoded: bits=%s ascii=%s", result.bits.c_str(), result.ascii.c_str());
+                LOGI("Decoded: bits=%s ascii=%s", result.bits.c_str(), result.ascii.c_str());
+
+                if (!result.ascii.empty())
+                {
+                    std::lock_guard<std::mutex> lock(result_mutex);
+                    latest_result = result.ascii;
+                }
+
+                states.clear();
+                last_state    = false;
+                state_counter = 0;
+                T_frames      = 0.0;
+                leader_found  = false;
+            }
+        }
+        if (leader_found && T_frames > 0.0 && !current_on)
+        {
+            double ratio = state_counter / T_frames;
+            if (ratio >= 10.0)
+            {
+                LOGI("Timeout fallback: ratio=%.2f", ratio);
+                states.push_back({last_state, state_counter});
+
+                DecodeResult result = decodeFromStates(0, T_frames, states);
+                LOGI("Decoded: bits=%s ascii=%s", result.bits.c_str(), result.ascii.c_str());
 
                 if (!result.ascii.empty())
                 {

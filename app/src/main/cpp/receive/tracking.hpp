@@ -73,7 +73,7 @@ struct Tracker
     Tracker() = default;
 };
 
-const double STATE_CHANGE_THRESHOLD = 150.0;
+const double STATE_CHANGE_THRESHOLD = 180.0;
 
 extern std::mutex cout_mutex;
 

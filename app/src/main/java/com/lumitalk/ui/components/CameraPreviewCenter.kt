@@ -82,7 +82,11 @@ fun CameraPreviewCenter(
                         for (row in 0 until roiHeight) {
                             var colOffset = row * rowStride
                             for (col in 0 until roiWidth) {
-                                roiBytes[yIdx++] = buffer.get(colOffset + 1) // G Channel をY成分として使用
+                                // roiBytes[yIdx++] = buffer.get(colOffset + 1) // G Channel をY成分として使用
+                                val r = buffer.get(colOffset + 0).toInt() and 0xFF
+                                val g = buffer.get(colOffset + 1).toInt() and 0xFF
+                                val b = buffer.get(colOffset + 2).toInt() and 0xFF
+                                roiBytes[yIdx++] = (0.299f * r + 0.587f * g + 0.114f * b).toInt().toByte()
                                 colOffset += pixelStride
                             }
                         }
