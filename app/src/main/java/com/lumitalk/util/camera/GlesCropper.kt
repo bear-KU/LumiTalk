@@ -37,6 +37,7 @@ class GlesCropper(
 
     private val transformMatrix = FloatArray(16)
     private val cropMatrix = FloatArray(16)
+    private val previewMatrix = FloatArray(16) // プレビュー用の行列を追加
 
     private var frameCounter = 0
 
@@ -129,22 +130,36 @@ class GlesCropper(
 
         frameCounter++
 
-        if (previewEglSurface != EGL14.EGL_NO_SURFACE && frameCounter % 4 == 0) { // プレビューは 30fps
+        // --- プレビュー用描画 (センタークロップ対応) ---
+        if (previewEglSurface != EGL14.EGL_NO_SURFACE && frameCounter % 4 == 0) {
             EGL14.eglMakeCurrent(eglDisplay, previewEglSurface, previewEglSurface, eglContext)
-            GLES20.glViewport(0, 0, srcWidth, srcHeight)
-            renderTexture(transformMatrix)
+            
+            // EGLSurface から実際の画面サイズを自動取得（UI側の変更不要）
+            val widthArray = IntArray(1)
+            val heightArray = IntArray(1)
+            EGL14.eglQuerySurface(eglDisplay, previewEglSurface, EGL14.EGL_WIDTH, widthArray, 0)
+            EGL14.eglQuerySurface(eglDisplay, previewEglSurface, EGL14.EGL_HEIGHT, heightArray, 0)
+            val viewWidth = widthArray[0]
+            val viewHeight = heightArray[0]
+
+            // Viewport を実際の画面サイズに合わせる
+            GLES20.glViewport(0, 0, viewWidth, viewHeight)
+            
+            // アスペクト比を保ったクロップ行列を計算
+            calculateCenterCropMatrix(previewMatrix, srcWidth, srcHeight, viewWidth, viewHeight)
+            Matrix.multiplyMM(previewMatrix, 0, transformMatrix, 0, previewMatrix, 0)
+
+            renderTexture(previewMatrix)
             EGL14.eglSwapBuffers(eglDisplay, previewEglSurface)
         }
 
+        // --- ROI用描画 (ズーム切り抜き対応) ---
         if (roiEglSurface != EGL14.EGL_NO_SURFACE) {
             EGL14.eglMakeCurrent(eglDisplay, roiEglSurface, roiEglSurface, eglContext)
             GLES20.glViewport(0, 0, roiWidth, roiHeight)
 
-            val scaleX = roiWidth.toFloat()  / srcWidth.toFloat()
-            val scaleY = roiHeight.toFloat() / srcHeight.toFloat()
-            Matrix.setIdentityM(cropMatrix, 0)
-            Matrix.translateM(cropMatrix, 0, (1f - 1f / scaleX) / 2f, (1f - 1f / scaleY) / 2f, 0f)
-            Matrix.scaleM(cropMatrix, 0, 1f / scaleX, 1f / scaleY, 1f)
+            // C++に渡す画像は、全体を縮小するのではなく、中心の該当ピクセル分だけをズームして切り抜く
+            calculateRoiZoomMatrix(cropMatrix, srcWidth, srcHeight, roiWidth, roiHeight)
             Matrix.multiplyMM(cropMatrix, 0, transformMatrix, 0, cropMatrix, 0)
 
             renderTexture(cropMatrix)
@@ -152,6 +167,58 @@ class GlesCropper(
             EGLExt.eglPresentationTimeANDROID(eglDisplay, roiEglSurface, timestamp)
             EGL14.eglSwapBuffers(eglDisplay, roiEglSurface)
         }
+    }
+
+    /**
+     * アスペクト比を維持しつつ、画面の中央を切り出す（センタークロップ）行列を計算します
+     * （プレビュー画面用：全体を見せるため）
+     */
+    private fun calculateCenterCropMatrix(
+        outMatrix: FloatArray,
+        srcW: Int, srcH: Int,
+        dstW: Int, dstH: Int
+    ) {
+        val srcRatio = srcW.toFloat() / srcH.toFloat()
+        val dstRatio = dstW.toFloat() / dstH.toFloat()
+
+        var scaleX = 1f
+        var scaleY = 1f
+
+        if (srcRatio > dstRatio) {
+            // カメラ映像の方が横長 → 左右を切り落とすため X軸を縮小
+            scaleX = dstRatio / srcRatio
+        } else {
+            // カメラ映像の方が縦長 → 上下を切り落とすため Y軸を縮小
+            scaleY = srcRatio / dstRatio
+        }
+
+        Matrix.setIdentityM(outMatrix, 0)
+        // テクスチャの中心(0.5, 0.5)を基準に拡大縮小する
+        Matrix.translateM(outMatrix, 0, 0.5f, 0.5f, 0f)
+        Matrix.scaleM(outMatrix, 0, scaleX, scaleY, 1f)
+        Matrix.translateM(outMatrix, 0, -0.5f, -0.5f, 0f)
+    }
+
+    /**
+     * カメラ映像の中心から、指定されたピクセルサイズ(roiW, roiH)の領域だけを
+     * ピンポイントでズームして切り抜く行列を計算します。
+     * （解析用：画面上の円の中身だけを等倍に近い解像度で送るため）
+     */
+    private fun calculateRoiZoomMatrix(
+        outMatrix: FloatArray,
+        srcW: Int, srcH: Int,
+        roiW: Int, roiH: Int
+    ) {
+        // カメラ映像(src)に対する、切り出したい領域(roi)の比率（ズーム倍率）を計算
+        // 例: srcW=1920, roiW=216 の場合、scaleX は約 8.88 になる（約8.8倍ズーム）
+        val scaleX = srcW.toFloat() / roiW.toFloat()
+        val scaleY = srcH.toFloat() / roiH.toFloat()
+
+        Matrix.setIdentityM(outMatrix, 0)
+        Matrix.translateM(outMatrix, 0, 0.5f, 0.5f, 0f)
+        // ズーム（拡大）することで、中心の狭い領域だけがサンプリングされるようにする
+        Matrix.scaleM(outMatrix, 0, scaleX, scaleY, 1f)
+        Matrix.translateM(outMatrix, 0, -0.5f, -0.5f, 0f)
     }
 
     private fun renderTexture(matrix: FloatArray) {
