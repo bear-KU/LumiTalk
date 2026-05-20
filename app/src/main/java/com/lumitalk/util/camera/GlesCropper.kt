@@ -140,12 +140,12 @@ class GlesCropper(
             EGL14.eglMakeCurrent(eglDisplay, roiEglSurface, roiEglSurface, eglContext)
             GLES20.glViewport(0, 0, roiWidth, roiHeight)
 
-            val scaleX = srcWidth.toFloat() / roiWidth.toFloat()
-            val scaleY = srcHeight.toFloat() / roiHeight.toFloat()
+            val scaleX = roiWidth.toFloat()  / srcWidth.toFloat()
+            val scaleY = roiHeight.toFloat() / srcHeight.toFloat()
             Matrix.setIdentityM(cropMatrix, 0)
-            Matrix.translateM(cropMatrix, 0, 0.5f - (0.5f * scaleX), 0.5f - (0.5f * scaleY), 0f)
-            Matrix.scaleM(cropMatrix, 0, scaleX, scaleY, 1f)
-            Matrix.multiplyMM(cropMatrix, 0, cropMatrix, 0, transformMatrix, 0)
+            Matrix.translateM(cropMatrix, 0, (1f - 1f / scaleX) / 2f, (1f - 1f / scaleY) / 2f, 0f)
+            Matrix.scaleM(cropMatrix, 0, 1f / scaleX, 1f / scaleY, 1f)
+            Matrix.multiplyMM(cropMatrix, 0, transformMatrix, 0, cropMatrix, 0)
 
             renderTexture(cropMatrix)
             
