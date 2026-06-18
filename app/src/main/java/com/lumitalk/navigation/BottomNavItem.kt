@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.GpsFixed
 
 sealed class BottomNavItem(
     val route: String,
@@ -17,6 +18,7 @@ sealed class BottomNavItem(
     object Send : BottomNavItem("send", "Send", Icons.Filled.FlashOn)
     object Receive : BottomNavItem("receive", "Receive", Icons.Filled.CameraAlt)
     object Analyze : BottomNavItem("analyze", "Analyze", Icons.Filled.VideoLibrary)
+    object ReceiveCenter : BottomNavItem("receive_center", "Center", Icons.Filled.GpsFixed)
     object Settings : BottomNavItem("settings", "Settings", Icons.Filled.Settings)
 }
 
@@ -25,5 +27,6 @@ val bottomNavItems = listOf(
     BottomNavItem.Send,
     BottomNavItem.Receive,
     BottomNavItem.Analyze,
+    BottomNavItem.ReceiveCenter,
     BottomNavItem.Settings
 )

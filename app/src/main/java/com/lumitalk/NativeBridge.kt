@@ -3,6 +3,10 @@ package com.lumitalk
 class NativeBridge {
     external fun generateSignalSequence(data: String, T: Int): IntArray
     external fun processFrame(frameData: ByteArray, width: Int, height: Int): String
+    external fun pushFrameCenter(frameData: ByteArray, width: Int, height: Int)
+    external fun getResultCenter(): String
+    external fun stopReceiveCenter()
+    external fun getStateCenter(): Boolean
 
     companion object {
         init {

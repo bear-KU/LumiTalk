@@ -2,6 +2,9 @@
 #include <limits>
 #include <android/log.h>
 
+#define LOG_TAG "tracking"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+
 std::mutex cout_mutex;
 
 Tracker::~Tracker()
@@ -86,7 +89,18 @@ void trackerThreadFunction(int id, ThreadSafeQueue<FrameUpdate>* queue, Tracker*
             if (T_frames > 0.0 && current_state_is_on)
             {
                 double ratio = state_counter / T_frames;
-                if (ratio >= 5.0)
+                if (ratio >= 3.5) // フレームドロップを考慮して，3.5 T 以上をトレイラとみなす
+                {
+                    LOGI("Trailer found: ratio=%.1f T_frames=%.2f", ratio, T_frames);
+                    states.push_back({last_state_is_on, state_counter});
+                    break;
+                }
+            }
+
+            if (T_frames > 0.0 && !current_state_is_on)
+            {
+                double ratio = state_counter / T_frames;
+                if (ratio >= 10.0)
                 {
                     states.push_back({last_state_is_on, state_counter});
                     break;
@@ -160,8 +174,8 @@ DecodeResult decodeFromStates(int id, double& T_frames, const std::vector<std::p
         if (!state.first) continue;
         double ratio = state.second / T_frames;
         if (ratio < 1.8) result.bits += "0";
-        else if (ratio >= 1.8 && ratio < 5.0) result.bits += "1";
-        else if (ratio >= 5.0) break;
+        else if (ratio >= 1.8 && ratio < 3.5) result.bits += "1"; // フレームドロップを考慮して，3.5 T 以上をトレイラとみなす
+        else if (ratio >= 3.5) break;
     }
     result.ascii = binaryToAscii(result.bits);
     return result;

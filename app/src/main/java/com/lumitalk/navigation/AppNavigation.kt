@@ -13,6 +13,7 @@ import com.lumitalk.ui.screens.MainScreen
 import com.lumitalk.ui.screens.SendScreen
 import com.lumitalk.ui.screens.ReceiveScreen
 import com.lumitalk.ui.screens.VideoAnalysisScreen
+import com.lumitalk.ui.screens.ReceiveCenterScreen
 import com.lumitalk.ui.screens.PlaceholderScreen
 
 @Composable
@@ -52,6 +53,9 @@ fun AppNavigation(
         }
         composable(videoAnalysisRoute) {
             VideoAnalysisScreen(onBack = { navController.popBackStack() })
+        }
+        composable(BottomNavItem.ReceiveCenter.route) {  // ← 追加
+            ReceiveCenterScreen()
         }
         composable(BottomNavItem.Settings.route) {
             PlaceholderScreen()
